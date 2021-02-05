@@ -1,0 +1,165 @@
+---
+title: "cind110_Assignment_03"
+author: "Ajay Herod"
+Due: "December 11, 2020"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+Use RStudio for this assignment. 
+Edit the file `A3_F19_Q.Rmd` and insert your R code where wherever you see the string "#WRITE YOUR ANSWER HERE"
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+This assignment makes use of data that were adapted from:
+https://www.ted.com/talks
+
+
+#Install and load required packages
+```{r}
+#install.packages("tm")       #Please Install if required
+#install.packages("text2vec") #Please Install if required
+library(tm)
+library(text2vec)
+```
+
+
+## Reading the Transcripts
+```{r}
+data <- read.csv(file = 'transcripts.csv', header = F, sep = '|')
+doc <- 0
+for (i in c(2:100)) {doc[i] <- as.character(data$V1[i])}
+doc.list <- as.list(doc[2:100])
+N.docs <- length(doc.list)
+names(doc.list) <- paste0("Doc", c(1:N.docs))
+Query <- as.character(data$V1[1])
+```
+
+## Preparing the Corpus
+```{r}
+my.docs <- VectorSource(c(doc.list, Query))
+my.docs$Names <- c(names(doc.list), "Query")
+my.corpus <- Corpus(my.docs)
+my.corpus
+```
+
+
+## Cleaning and Preprocessing the text (Cleansing Techniques)
+```{r}
+#Write your answer here for Question 1
+#Hint: use getTransformations() function in tm Package
+#https://cran.r-project.org/web/packages/tm/tm.pdf
+my.corpus <- tm_map(my.corpus, removeWords, stopwords("en"))
+#By applying a stop word removal algorithm to our text pre=processing we are going to remove words that do not drive the analysis and free up space, which helps processing. 
+my.corpus <- tm_map(my.corpus, removePunctuation)
+#Similarly to the stop word text pre-processing techniques we are removing noise that does not contribute to the meaning of the sentence with the punctionation removal algorithm.
+#install.packages(SnowballC)
+library(SnowballC)
+my.corpus <- tm_map(my.corpus, stemDocument, language="english")
+#By applying a stemming algorithm we are trimming the suffix and prefix of words, which helps text pre-processing by simplifying the words. 
+```
+
+##Creating a uni-gram Term Document Matrix
+```{r}
+term.doc.matrix <- TermDocumentMatrix(my.corpus)
+inspect(term.doc.matrix[1:10,1:10])
+```
+
+## Converting the generated TDM into a matrix and displaying the first 6 rows and the dimensions of the matrix
+```{r}
+term.doc.matrix <- as.matrix(term.doc.matrix)
+head(term.doc.matrix)
+dim(term.doc.matrix)
+```
+
+## Declaring weights (TF-IDF)
+```{r}
+get.tf.idf.weights <- function(tf.vec) {
+  # Computes the tfidf weights from the term frequency vector
+  n.docs <- length(tf.vec)
+  doc.frequency <- length(tf.vec[tf.vec > 0])
+  weights <- rep(0, length(tf.vec))
+  relative.frequency <- tf.vec[tf.vec > 0] / sum(tf.vec[tf.vec > 0])
+  weights[tf.vec > 0] <-  relative.frequency * log(n.docs/doc.frequency)
+  return(weights)
+}
+```
+
+## Declaring weights (TF-IDF variants)
+```{r}
+#First Varient 
+get.tf.idf.weights1 <- function(tf.vec) {
+  # Computes the tfidf weights from the term frequency vector
+  n.docs <- length(tf.vec)
+  doc.frequency <- length(tf.vec[tf.vec > 0])
+  weights <- rep(0, length(tf.vec))
+  relative.frequency <- tf.vec[tf.vec > 0] / sum(tf.vec[tf.vec > 0])
+  weights[tf.vec > 0] <-  relative.frequency * 1
+  return(weights)
+}
+#Second Varient 
+get.tf.idf.weights2 <- function(tf.vec) {
+  # Computes the tfidf weights from the term frequency vector
+  n.docs <- length(tf.vec)
+  doc.frequency <- length(tf.vec[tf.vec > 0])
+  weights <- rep(0, length(tf.vec))
+  relative.frequency <- 1 + log(tf.vec[tf.vec > 0])
+  weights[tf.vec > 0] <-  relative.frequency * log(1+(n.docs/doc.frequency))
+  return(weights)
+}
+#Third Varient 
+get.tf.idf.weights3 <- function(tf.vec) {
+  # Computes the tfidf weights from the term frequency vector
+  n.docs <- length(tf.vec)
+  doc.frequency <- length(tf.vec[tf.vec > 0])
+  weights <- rep(0, length(tf.vec))
+  relative.frequency <- tf.vec[tf.vec > 0]
+  weights[tf.vec > 0] <-  relative.frequency * log(n.docs/doc.frequency)
+  return(weights)
+}
+```
+
+###Computing Cosine Similarity and Displaying a heatmap
+```{r}
+tfidf.matrix <- t(apply(term.doc.matrix, 1,
+                        FUN = function(row) {get.tf.idf.weights(row)}))
+
+colnames(tfidf.matrix) <- my.docs$Names
+
+head(tfidf.matrix)
+dim(tfidf.matrix)
+
+
+similarity.matrix <- sim2(t(tfidf.matrix), method = 'cosine')
+heatmap(similarity.matrix)
+```
+
+##Showing the Results
+```{r}
+sort(similarity.matrix["Query", ], decreasing = TRUE)[1:10]
+```
+
+## Use the following chunck to comment and conclude after conducting your comparative analyses
+```{r}
+#The first TF-IDF variant is similar to the original variant in the aspects of ordered doc weights. We can see that they share 9 out of the 10 highest weighted docs with similar order. The first variant differs from the original in the in individual weight, we can see that the first variants weights are more than doubled for each doc not including the matching doc 99 and the query.
+#The second TF-IDF variant is also similar to the original variant by ordered doc weights. We can see that they share 8 out of 10 highest weighted docs, but differ in the ordering. The weights of each doc in the second variant is drastically increased compared to the original with the 10th highest weighted doc being more than the third highest in the original.
+#The final TF-IDF variant is also similar to the original variant by ordered doc weights. They share 7 out of 10 highest weighted docs and differ in order. The weights of each doc in the second variant is drastically increased compared to the original. 
+#Overall we can see more change in each variant from the original. This tells me as we change the TF in the function it increases variance in the weight order. Whereas change in IDF shows more increase in weigth value. 
+```
+
+
+## Use the following chunck to answer Question 4
+```{r}
+#Terms with two adjacent words is only worth pursuing if the term's meaning differs from the term when both words are separated. These are referred to as an oxymoron, an example is "living dead"; which greatly varies in meaning when separate or together. The term frequency would need to be weighted higher in the TF-IDF. 
+```
